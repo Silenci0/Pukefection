@@ -1,0 +1,25 @@
+"Games"
+{
+    /* Zombic Panic Source 3.0 */
+    "zps"
+    {
+        "Offsets"
+        {
+            "CHL2MP_Player::InfectPlayer"
+            {
+                "windows"	"521"
+                "linux"     "522"
+            }
+            "CHL2MP_Player::ForceInfectPlayer"
+            {
+                "windows"	"522"
+                "linux"     "523"
+            }
+            "CHL2MP_Player::UnInfectPlayer"
+            {
+                "windows"	"523"
+                "linux"     "524"
+            }
+        }
+    }
+}
