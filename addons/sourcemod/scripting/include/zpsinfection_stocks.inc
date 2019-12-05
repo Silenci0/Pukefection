@@ -25,18 +25,19 @@ You should have received a copy of the GNU General Public License
 along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
 *************************************************************************
 *************************************************************************/
+#pragma newdecls required
 
 // Handles for our in-game functions calls that we will use later
-new Handle:g_hInfectPlayerCall = INVALID_HANDLE;
-new Handle:g_hForceInfectPlayerCall = INVALID_HANDLE;
-new Handle:g_hUnInfectPlayerCall = INVALID_HANDLE;
+Handle g_hInfectPlayerCall = INVALID_HANDLE;
+Handle g_hForceInfectPlayerCall = INVALID_HANDLE;
+Handle g_hUnInfectPlayerCall = INVALID_HANDLE;
 
 // Setup all of our SDK calls for in-game infection functions. 
 // THIS MUST BE CALLED IN ORDER TO INITIALIZE ALL INFECTION CALLS!!!!!
-stock bool:ZPSInfectionInit()
+stock bool ZPSInfectionInit()
 {
     // Get our gamedata for use in the SDKCalls
-    new Handle:InfectionGameData = LoadGameConfigFile("zpsinfection.gamedata");
+    Handle InfectionGameData = LoadGameConfigFile("zpsinfection.gamedata");
     if(InfectionGameData == INVALID_HANDLE)
     {
         SetFailState("Could not read zpsinfection.gamedata gamedata. Please make sure the file exists!");
@@ -81,7 +82,7 @@ stock bool:ZPSInfectionInit()
 }
 
 // Player will be infected, turning into a zombie after <seconds> time.
-stock InfectPlayer(client, Float:seconds)
+stock void InfectPlayer(int client, float seconds)
 {
     if(!IsPlayerValid(client))
     {
@@ -92,7 +93,7 @@ stock InfectPlayer(client, Float:seconds)
 }
 
 // Player will be forcibly infected, turning into a zombie after <seconds> time.
-stock ForceInfectPlayer(client, Float:seconds) 
+stock void ForceInfectPlayer(int client, float seconds) 
 {
     if(!IsPlayerValid(client))
     {
@@ -103,7 +104,7 @@ stock ForceInfectPlayer(client, Float:seconds)
 }
 
 // Removes infection from our player.
-stock UnInfectPlayer(client) 
+stock void UnInfectPlayer(int client) 
 {
     if(!IsPlayerValid(client))
     {
@@ -114,13 +115,13 @@ stock UnInfectPlayer(client)
 }
 
 // Is the player actually infected or not?
-stock bool:IsPlayerInfected(client)
+stock bool IsPlayerInfected(int client)
 {
     return 0 < GetEntData(client, FindSendPropInfo("CHL2MP_Player","m_IsInfected"), 4);
 }
 
 // Checks to make sure our player is actually valid or not.
-stock bool:IsPlayerValid(client)
+stock bool IsPlayerValid(int client)
 {
     // Are they connected, in game, and alive? 
     if (IsClientInGame(client) && IsClientConnected(client) && IsPlayerAlive(client))
@@ -131,14 +132,14 @@ stock bool:IsPlayerValid(client)
     return false;
 }
 
-stock bool:IsCarrierZombie(client) 
+stock bool IsCarrierZombie(int client) 
 {
     if(!IsPlayerValid(client))
     {
         return false;
     }
 	
-    decl String:weaponName[32];
+    char weaponName[32];
     GetClientWeapon(client, weaponName, sizeof(weaponName));
     return 0 == strcmp(weaponName, "weapon_carrierarms");
 }

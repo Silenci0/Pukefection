@@ -34,13 +34,15 @@ along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
 #include <sdktools>
 #include <zpsinfection_stocks>
 
+#pragma newdecls required
+
 #define TEAM_HUMAN 2
 #define TEAM_ZOMBIE 3
-#define PLUGIN_VERSION "3.0"
+#define PLUGIN_VERSION "3.1.0"
 #define MSG_YOU_CAN_PUKE "** Infectious zombie puke attack! Say /puke to bind a key to pukefection_puke **"
 
 #define PUKE_SOUND_COUNT 6
-new String:g_PukeSounds[PUKE_SOUND_COUNT][128] = 
+char g_PukeSounds[PUKE_SOUND_COUNT][128] = 
 {
 	"Zombies/Z_Carrier_Speech/Pain/Zcarrier_Pain-04.wav",
 	"Zombies/Z_Carrier_Speech/Pain/Zcarrier_Pain-06.wav",
@@ -52,7 +54,7 @@ new String:g_PukeSounds[PUKE_SOUND_COUNT][128] =
 
 // AirRough-03 had some weird distortion or something
 #define WATER_SOUND_COUNT 7
-new String:g_WaterSounds[WATER_SOUND_COUNT][128] = 
+char g_WaterSounds[WATER_SOUND_COUNT][128] = 
 {
 	"Humans/HM_Water/HM_AirRough-01.wav",
 	"Humans/HM_Water/HM_AirRough-02.wav",
@@ -63,35 +65,34 @@ new String:g_WaterSounds[WATER_SOUND_COUNT][128] =
 	"Humans/HM_Water/HM_Air-04.wav"
 };
 		
-// cvars
-new Handle:g_cvPukefectionEnabled       = INVALID_HANDLE;
-new Handle:g_cvPukefectionCarrierOnly   = INVALID_HANDLE;
-new Handle:g_cvPukefectionChance        = INVALID_HANDLE;
-new Handle:g_cvPukefectionTurnTimeLow   = INVALID_HANDLE;
-new Handle:g_cvPukefectionTurnTimeHigh  = INVALID_HANDLE;
-new Handle:g_cvPukefectionPukeTime      = INVALID_HANDLE;
-new Handle:g_cvPukefectionPukeDelay     = INVALID_HANDLE;
-new Handle:g_cvPukefectionPukeRate      = INVALID_HANDLE;
-new Handle:g_cvPukefectionPukeRange     = INVALID_HANDLE;
-new Handle:g_cvPukefectionParticle      = INVALID_HANDLE;
-new Handle:g_cvPukefectionDamage        = INVALID_HANDLE;
+// ConVars 
+ConVar g_cvPukefectionEnabled = null;
+ConVar g_cvPukefectionCarrierOnly = null;
+ConVar g_cvPukefectionChance = null;
+ConVar g_cvPukefectionTurnTimeLow = null;
+ConVar g_cvPukefectionTurnTimeHigh = null;
+ConVar g_cvPukefectionPukeTime = null;
+ConVar g_cvPukefectionPukeDelay = null;
+ConVar g_cvPukefectionPukeRate = null;
+ConVar g_cvPukefectionPukeRange = null;
+ConVar g_cvPukefectionParticle = null;
+ConVar g_cvPukefectionDamage = null;
 
 // Puke timers
-new g_MaxClients;
-new Float:g_LastPukeTime[MAXPLAYERS+1];
-new Handle:g_PukeTimer[MAXPLAYERS+1];
-new g_PukeParticles[MAXPLAYERS+1];
+float g_fLastPukeTime[MAXPLAYERS+1];
+Handle g_PukeTimer[MAXPLAYERS+1] = INVALID_HANDLE;
+int g_iPukeParticles[MAXPLAYERS+1];
 
 // Menus
-new Handle:g_BindMenu = INVALID_HANDLE;
+Menu g_hBindMenu = null;
 
-public Plugin:myinfo = 
+public Plugin myinfo = 
 {
     name = "[ZPS] Pukefection",
     author = "Original: Dr. Rambone Murdoch PhD, Updated by: Kana, Mr.Silence",
     description = "Infectious vomit for zps.",
     version = PLUGIN_VERSION,
-    url = "http://rambonemurdoch.blogspot.com/"
+    url = "https://github.com/Silenci0/Pukefection"
 }	
 
 ///////////////////////////////////
@@ -99,16 +100,16 @@ public Plugin:myinfo =
 //=====[ EVENTS ]================//
 //===============================//
 ///////////////////////////////////
-public OnPluginStart() 
+public void OnPluginStart() 
 {
     // Create convars. Everything but the plugin convar will be recorded into a config file.
-    CreateConVar("pukefection_version", PLUGIN_VERSION, "Pukefection",FCVAR_DONTRECORD|FCVAR_NOTIFY|FCVAR_REPLICATED|FCVAR_SPONLY);
-    g_cvPukefectionEnabled = CreateConVar("pukefection_enabled", "1", "Turn on Pukefection.",FCVAR_NOTIFY|FCVAR_REPLICATED);
-    g_cvPukefectionCarrierOnly = CreateConVar("pukefection_carrier_only", "0", "Only the carrier zombie may puke.",FCVAR_NOTIFY|FCVAR_REPLICATED);
+    CreateConVar("pukefection_version", PLUGIN_VERSION, "Pukefection Version.",FCVAR_DONTRECORD|FCVAR_NOTIFY|FCVAR_REPLICATED|FCVAR_SPONLY);
+    g_cvPukefectionEnabled = CreateConVar("pukefection_enabled", "1", "Enables Pukefection.",FCVAR_NOTIFY|FCVAR_REPLICATED);
+    g_cvPukefectionCarrierOnly = CreateConVar("pukefection_carrier_only", "0", "Only allow puking for the carrier zombie.",FCVAR_NOTIFY|FCVAR_REPLICATED);
     g_cvPukefectionChance = CreateConVar("pukefection_chance", "0.1", "Probability a puke hit will infect the survivor.", FCVAR_NOTIFY|FCVAR_REPLICATED, true, 0.0, true, 1.0);
     g_cvPukefectionTurnTimeLow = CreateConVar("pukefection_turn_time_low", "10", "If infected by puke, lower bound on seconds until player turns zombie.", FCVAR_NOTIFY|FCVAR_REPLICATED, true, 0.0);
     g_cvPukefectionTurnTimeHigh = CreateConVar("pukefection_turn_time_high", "45", "If infected by puke, upper bound on seconds until player turns zombie.",FCVAR_NOTIFY|FCVAR_REPLICATED);
-    g_cvPukefectionParticle = CreateConVar("pukefection_particle", "blood_advisor_shrapnel_spurt_2", "puke particle effect.",FCVAR_NOTIFY|FCVAR_REPLICATED); 
+    g_cvPukefectionParticle = CreateConVar("pukefection_particle", "blood_advisor_shrapnel_spurt_2", "Puke particle effect.",FCVAR_NOTIFY|FCVAR_REPLICATED); 
     g_cvPukefectionPukeTime = CreateConVar("pukefection_time", "5.5", "How long each puke lasts.",FCVAR_NOTIFY|FCVAR_REPLICATED); 
     g_cvPukefectionPukeDelay = CreateConVar("pukefection_delay", "6.0", "Delay between pukes.",FCVAR_NOTIFY|FCVAR_REPLICATED); 
     g_cvPukefectionPukeRate = CreateConVar("pukefection_rate", "0.3", "Interval between infection attacks while puking.",FCVAR_NOTIFY|FCVAR_REPLICATED);
@@ -137,54 +138,53 @@ public OnPluginStart()
     RegConsoleCmd("say_team", OnPukeCmdSay);
 }
 
-public OnPluginEnd() 
+public void OnPluginEnd() 
 {
     UnhookEvent("player_spawn", Event_PFPlayerSpawn);
     UnhookEvent("player_death", Event_PFPlayerKilled);
 }
 
-public OnMapStart() 
+public void OnMapStart() 
 {
-    g_MaxClients = GetMaxClients();
-    for(new i=1; i <= g_MaxClients; i++) 
+    for(int i = 1; i <= MaxClients; i++) 
     {
-        g_LastPukeTime[i] = 0.0;
-        g_PukeParticles[i] = -1;
+        g_fLastPukeTime[i] = 0.0;
+        g_iPukeParticles[i] = -1;
         g_PukeTimer[i] = INVALID_HANDLE;
         if(IsClientInGame(i))
         {
             InitPlayerPukeState(i);
         }
     }
-    g_BindMenu = CreatePFKeyBindMenu();
+    g_hBindMenu = CreatePFKeyBindMenu();
 }
 
-public OnMapEnd() 
+public void OnMapEnd() 
 {
-    if(INVALID_HANDLE != g_BindMenu) 
+    if(g_hBindMenu != null)
     {
-        CloseHandle(g_BindMenu);
-        g_BindMenu = INVALID_HANDLE;
-    }	
+        CloseHandle(g_hBindMenu);
+        g_hBindMenu = null;
+    }
 }
 
-public OnClientDisconnect(client) 
+public void OnClientDisconnect(int client) 
 {
     // Stop puking and effects.
     StopPlayerPuking(client);
     DeletePukeParticles(client);
-    g_LastPukeTime[client] = 0.0;
+    g_fLastPukeTime[client] = 0.0;
 }
 
 // On player spawn, initialize  our puke state and puke times. 
-public Event_PFPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast) 
+public void Event_PFPlayerSpawn(Handle event, const char[] name, bool dontBroadcast) 
 {
-    new client = GetClientOfUserId(GetEventInt(event, "userid"));
+    int client = GetClientOfUserId(GetEventInt(event, "userid"));
     
     if (client > 0)
     {
         InitPlayerPukeState(client);
-        g_LastPukeTime[client] = 0.0; // allow puke attack immediately 
+        g_fLastPukeTime[client] = 0.0; // allow puke attack immediately 
         if(GetConVarBool(g_cvPukefectionEnabled) && GetClientTeam(client) == TEAM_ZOMBIE)
         {
             PrintToChat(client, MSG_YOU_CAN_PUKE);
@@ -192,9 +192,9 @@ public Event_PFPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast
     }
 }
 
-public Event_PFPlayerKilled(Handle:event, const String:name[], bool:dontBroadcast) 
+public void Event_PFPlayerKilled(Handle event, const char[] name, bool dontBroadcast) 
 {
-    new client = GetClientOfUserId(GetEventInt(event, "userid"));
+    int client = GetClientOfUserId(GetEventInt(event, "userid"));
     StopPlayerPuking(client);
     DeletePukeParticles(client);
 }
@@ -204,7 +204,7 @@ public Event_PFPlayerKilled(Handle:event, const String:name[], bool:dontBroadcas
 //=====[ Actions ]=============//
 //=============================//
 /////////////////////////////////
-public Action:Command_PukefectionPuke(client, args) 
+public Action Command_PukefectionPuke(int client, any args) 
 {
     // quit if not enabled
     if(!GetConVarBool(g_cvPukefectionEnabled))
@@ -224,10 +224,10 @@ public Action:Command_PukefectionPuke(client, args)
         return Plugin_Handled;
     }
 	
-    new Float:curTime = GetGameTime();
+    float curTime = GetGameTime();
     
     // quit if not enough time has elapsed since last puke
-    if(curTime < g_LastPukeTime[client] + GetConVarFloat(g_cvPukefectionPukeDelay))
+    if(curTime < g_fLastPukeTime[client] + GetConVarFloat(g_cvPukefectionPukeDelay))
     {
         return Plugin_Handled;
     }
@@ -239,12 +239,12 @@ public Action:Command_PukefectionPuke(client, args)
     }
     
     // drop loads
-    g_LastPukeTime[client] = curTime;
+    g_fLastPukeTime[client] = curTime;
     StartPlayerPuking(client);
     return Plugin_Handled;
 }
 
-public Action:ControlPukefectionAttack(Handle:timer, any:client) 
+public Action ControlPukefectionAttack(Handle timer, int client) 
 {
     if(!CanPuke(client)) 
     {
@@ -255,16 +255,16 @@ public Action:ControlPukefectionAttack(Handle:timer, any:client)
     PukefectionAttack(client);
     
     // has the puking gone on long enough?
-    new Float:curTime = GetGameTime();
-    if(curTime - g_LastPukeTime[client] > GetConVarFloat(g_cvPukefectionPukeTime)) 
+    float curTime = GetGameTime();
+    if(curTime - g_fLastPukeTime[client] > GetConVarFloat(g_cvPukefectionPukeTime)) 
     {
         StopPlayerPuking(client);
     }
 }
 
-public Action:OnPukeCmdSay(client, args) 
+public Action OnPukeCmdSay(int client, any args) 
 { 
-    decl String:text[192];
+    char text[192];
     GetCmdArg(1, text, sizeof(text));
     TrimString(text);
     if(!StrEqual(text, "/puke")) 
@@ -273,7 +273,7 @@ public Action:OnPukeCmdSay(client, args)
     }
     
     // they want pukefection info
-    DisplayMenu(g_BindMenu, client, 30);
+    DisplayMenu(g_hBindMenu, client, 30);
     return Plugin_Handled;
 }
 
@@ -286,29 +286,29 @@ public Action:OnPukeCmdSay(client, args)
 /**************
 * Puke States *
 ***************/
-InitPlayerPukeState(client) 
+void InitPlayerPukeState(int client) 
 {
     AttachPukeParticles(client);
-    g_LastPukeTime[client] = 0.0; // allow puke attack immediately 
+    g_fLastPukeTime[client] = 0.0; // allow puke attack immediately 
 }
 
-StartPlayerPuking(client) 
+void StartPlayerPuking(int client) 
 {
     EmitPukeSoundRandom(client);
     g_PukeTimer[client] = CreateTimer(GetConVarFloat(g_cvPukefectionPukeRate), ControlPukefectionAttack, client, TIMER_REPEAT);
-    if(!AcceptEntityInput(g_PukeParticles[client], "start"))
+    if(!AcceptEntityInput(g_iPukeParticles[client], "start"))
     {
         PrintToConsole(client, "Couldn't start particles");
     }
-    g_LastPukeTime[client] = GetGameTime();
+    g_fLastPukeTime[client] = GetGameTime();
 }
 
-StopPlayerPuking(client) 
+void StopPlayerPuking(int client) 
 {
-    new Handle:timer = g_PukeTimer[client];
-    if(g_PukeParticles[client] != -1) 
+    Handle timer = g_PukeTimer[client];
+    if(g_iPukeParticles[client] != -1) 
     {
-        AcceptEntityInput(g_PukeParticles[client], "stop");
+        AcceptEntityInput(g_iPukeParticles[client], "stop");
     }
     if(timer != INVALID_HANDLE) 
     {
@@ -317,14 +317,14 @@ StopPlayerPuking(client)
     }
 }
 
-bool:CanPuke(client) 
+bool CanPuke(int client) 
 {
     if(!IsPlayerValid(client))
     {
         return false;
     }
 	
-    new team = GetClientTeam(client);
+    int team = GetClientTeam(client);
     if(team != TEAM_ZOMBIE)
     {
         return false;
@@ -336,7 +336,7 @@ bool:CanPuke(client)
 /*****************
 * Sound Emittion *
 ******************/
-EmitPukeSoundRandom(client) 
+void EmitPukeSoundRandom(int client) 
 {
     if(GetClientTeam(client) == TEAM_HUMAN) 
     {
@@ -348,19 +348,19 @@ EmitPukeSoundRandom(client)
     }
 }
 
-EmitWaterSoundRandom(client) 
+void EmitWaterSoundRandom(int client) 
 {
     EmitSoundToAll(g_WaterSounds[GetRandomInt(0, WATER_SOUND_COUNT - 1)], client);
 }
 
-bool:PrecacheSounds() 
+bool PrecacheSounds() 
 {
-    new bool:bCleanLoad = true;
-    for(new i=0; i < PUKE_SOUND_COUNT; i++) 
+    bool bCleanLoad = true;
+    for(int i = 0; i < PUKE_SOUND_COUNT; i++) 
     {
         bCleanLoad = bCleanLoad && PrecacheSound(g_PukeSounds[i]);
     }
-    for(new i=0; i < WATER_SOUND_COUNT; i++) 
+    for(int i = 0; i < WATER_SOUND_COUNT; i++) 
     {
         bCleanLoad = bCleanLoad && PrecacheSound(g_WaterSounds[i]);
     }
@@ -371,16 +371,16 @@ bool:PrecacheSounds()
 * Puke Particles *
 ******************/
 // Derived from code by "L. Duke" at http://forums.alliedmods.net/showthread.php?t=75102
-AttachPukeParticles(ent) 
+void AttachPukeParticles(int ent) 
 {
-    new particle = CreateEntityByName("info_particle_system");
-    decl String:tName[32];
-    decl String:sysName[32];
-    decl String:particleName[128];
+    int particle = CreateEntityByName("info_particle_system");
+    char tName[32];
+    char sysName[32];
+    char particleName[128];
     if (IsValidEdict(particle))
     {
-        new Float:pos[3];
-        new Float:eyeAngles[3];
+        float pos[3];
+        float eyeAngles[3];
         GetClientEyeAngles(ent, eyeAngles);
         GetEntPropVector(ent, Prop_Send, "m_vecOrigin", pos);
         TeleportEntity(particle, pos, NULL_VECTOR, NULL_VECTOR);
@@ -412,7 +412,7 @@ AttachPukeParticles(ent)
         SetVariantString("anim_attachment_head");
         AcceptEntityInput(particle, "SetParentAttachmentMaintainOffset", particle, particle, 0);
         ActivateEntity(particle);
-        g_PukeParticles[ent] = particle;
+        g_iPukeParticles[ent] = particle;
     } 
     else 
     {
@@ -420,19 +420,19 @@ AttachPukeParticles(ent)
     }
 }
 
-DeletePukeParticles(client) 
+void DeletePukeParticles(int client) 
 {
-    new particle = g_PukeParticles[client];
-    if(g_PukeParticles[client] != -1 && IsValidEntity(particle)) 
+    int particle = g_iPukeParticles[client];
+    if(g_iPukeParticles[client] != -1 && IsValidEntity(particle)) 
     {
         RemoveEdict(particle);
     }
-    g_PukeParticles[client] = -1;
+    g_iPukeParticles[client] = -1;
 }
 
-GivePukeDamagePlayer(victim) 
+void GivePukeDamagePlayer(int victim) 
 {
-    new health = GetClientHealth(victim);
+    int health = GetClientHealth(victim);
     health -= GetConVarInt(g_cvPukefectionDamage);
     health = health >= 1 ? health : 1; // don't allow death by puke?
     SetEntityHealth(victim, health);
@@ -441,12 +441,12 @@ GivePukeDamagePlayer(victim)
 /**************
 * Puke Attack *
 ***************/
-public PukefectionAttack(attacker) 
+public void PukefectionAttack(int attacker) 
 {
     //PrintToConsole(attacker, "Pukefection - Puke attack!");
-    new Float:vStart[3];
-    new Float:vAng[3];
-    new Float:vEnd[3];
+    float vStart[3];
+    float vAng[3];
+    float vEnd[3];
     GetClientEyePosition(attacker, vStart);
     GetClientEyeAngles(attacker, vAng);
     GetAngleVectors(vAng, vEnd, NULL_VECTOR, NULL_VECTOR);
@@ -458,19 +458,19 @@ public PukefectionAttack(attacker)
         return; // no one to potentially infect
     }
     
-    new victim = TR_GetEntityIndex();
+    int victim = TR_GetEntityIndex();
 	
     // return if not human
-    if(victim==0 || victim > GetMaxClients() || GetClientTeam(victim) != TEAM_HUMAN)
+    if(victim == 0 || victim > MaxClients || GetClientTeam(victim) != TEAM_HUMAN)
     {
         return;
     }
 
     // Close enough?
-    new Float:hitPos[3];
+    float hitPos[3];
     TR_GetEndPosition(hitPos);
     SubtractVectors(hitPos, vStart, hitPos);
-    new Float:hitDist = GetVectorLength(hitPos);
+    float hitDist = GetVectorLength(hitPos);
     if(hitDist > GetConVarFloat(g_cvPukefectionPukeRange))
     {
         return;
@@ -495,7 +495,7 @@ public PukefectionAttack(attacker)
     EmitWaterSoundRandom(victim); // glub glub 	
     
     // Infect target based on high/low time intervals
-    new Float:turnTime = GetRandomFloat(GetConVarFloat(g_cvPukefectionTurnTimeLow),GetConVarFloat(g_cvPukefectionTurnTimeHigh));
+    float turnTime = GetRandomFloat(GetConVarFloat(g_cvPukefectionTurnTimeLow),GetConVarFloat(g_cvPukefectionTurnTimeHigh));
     InfectPlayer(victim, turnTime);
 	
     // Possibly give the infected a chance to escape zombies so they might join up with a group of survivors
@@ -503,7 +503,7 @@ public PukefectionAttack(attacker)
 }
 
 // Check our data to check that the entity we "hit" is not itself
-public bool:TraceRayDontHitSelf(entity, mask, any:data)
+public bool TraceRayDontHitSelf(int entity, int mask, any data)
 {
     if(entity == data)
     {
@@ -515,10 +515,10 @@ public bool:TraceRayDontHitSelf(entity, mask, any:data)
 /*****************
 * Key Bind Menus *
 ******************/
-public Handle:CreatePFKeyBindMenu() 
+public Menu CreatePFKeyBindMenu() 
 {
     // TODO: created binderhelper which generalizes this, leave anyways?
-    new Handle:bindMenu = CreateMenu(Menu_PFSelectKeyBind);
+    Menu bindMenu = CreateMenu(Menu_PFSelectKeyBind);
     SetMenuTitle(bindMenu, "Select a key for Pukefection:");
     AddMenuItem(bindMenu, "q", "q");
     AddMenuItem(bindMenu, "c", "c");
@@ -527,11 +527,11 @@ public Handle:CreatePFKeyBindMenu()
     return bindMenu;
 }
 
-public Menu_PFSelectKeyBind(Handle:menu, MenuAction:action, param1, param2) 
+public int Menu_PFSelectKeyBind(Menu menu, MenuAction action, int param1, int param2) 
 {
     if(action == MenuAction_Select) 
     {
-        decl String:choice[32];
+        char choice[32];
         GetMenuItem(menu, param2, choice, sizeof(choice));
         PrintToChat(param1, "Binding puke to %s", choice);
         ClientCommand(param1, "bind %s pukefection_puke", choice);
